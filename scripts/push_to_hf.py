@@ -1,8 +1,8 @@
 """
-Push benchmark results to HuggingFace Hub.
+Push multi-model benchmark results to HuggingFace Hub.
 
-Creates a dataset repository with benchmark metrics that can be
-viewed via HuggingFace's Dataset Viewer or consumed by a dashboard.
+Creates a dataset repository with leaderboard and per-model metrics
+viewable via HuggingFace's Dataset Viewer or a dashboard.
 """
 
 import argparse
@@ -25,137 +25,96 @@ def parse_args():
         "--results-file",
         type=str,
         default=None,
-        help="Path to the benchmark results JSON file. If omitted, uses the latest in results/.",
+        help="Path to benchmark results JSON. Default: latest in results/.",
     )
     parser.add_argument(
         "--hf-repo-id",
         type=str,
         required=True,
-        help="HuggingFace repo ID to push results to (e.g., 'username/asr-benchmark-results')",
+        help="HuggingFace repo ID (e.g., 'username/asr-benchmark-results')",
     )
     parser.add_argument(
         "--private",
         action="store_true",
         default=False,
-        help="Make the HuggingFace repo private",
     )
     return parser.parse_args()
 
 
 def find_latest_results():
-    """Find the latest benchmark results file."""
-    results_files = sorted(RESULTS_DIR.glob("openai_*.json"), reverse=True)
+    results_files = sorted(RESULTS_DIR.glob("benchmark_*.json"), reverse=True)
     if not results_files:
         raise FileNotFoundError(f"No results files found in {RESULTS_DIR}")
     return results_files[0]
 
 
-def load_results(results_file: Path) -> dict:
-    """Load benchmark results from a JSON file."""
-    with open(results_file, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def push_metrics_dataset(results: dict, repo_id: str, private: bool):
-    """Push benchmark metrics as a HuggingFace dataset."""
+def push_results(results: dict, repo_id: str, private: bool):
     api = HfApi()
-
-    # Create or get the repo
-    create_repo(
-        repo_id=repo_id,
-        repo_type="dataset",
-        private=private,
-        exist_ok=True,
-    )
-    logger.info(f"Repository ready: https://huggingface.co/datasets/{repo_id}")
+    create_repo(repo_id=repo_id, repo_type="dataset", private=private, exist_ok=True)
+    logger.info(f"Repository: https://huggingface.co/datasets/{repo_id}")
 
     metadata = results["metadata"]
-    metrics = results["metrics"]
+    leaderboard = results["leaderboard"]
 
-    # 1. Push summary metrics as a dataset
-    summary_data = {
-        "model_id": [metadata["model_id"]],
-        "dataset_id": [metadata["dataset_id"]],
-        "split": [metadata["split"]],
-        "language": [metadata["language"]],
-        "timestamp": [metadata["timestamp"]],
-        "device": [metadata["device"]],
-        "wer": [metrics["overall_wer"]],
-        "cer": [metrics["overall_cer"]],
-        "num_samples": [metrics["num_samples"]],
-        "total_audio_duration_s": [metrics["total_audio_duration_s"]],
-        "total_inference_time_s": [metrics["total_inference_time_s"]],
-        "real_time_factor": [metrics.get("real_time_factor")],
-        "batch_size": [metrics["batch_size"]],
-    }
+    # 1. Push leaderboard
+    lb_data = {k: [entry.get(k) for entry in leaderboard] for k in [
+        "model_id", "category", "size_params", "dataset_id",
+        "wer", "cer", "rtf", "inference_time_s",
+        "avg_time_per_sample_s", "cost_T4_usd", "cost_free_tier",
+    ]}
+    lb_ds = Dataset.from_dict(lb_data)
 
-    summary_features = Features({
-        "model_id": Value("string"),
-        "dataset_id": Value("string"),
-        "split": Value("string"),
-        "language": Value("string"),
-        "timestamp": Value("string"),
-        "device": Value("string"),
-        "wer": Value("float64"),
-        "cer": Value("float64"),
-        "num_samples": Value("int64"),
-        "total_audio_duration_s": Value("float64"),
-        "total_inference_time_s": Value("float64"),
-        "real_time_factor": Value("float64"),
-        "batch_size": Value("int64"),
-    })
+    # 2. Push per-sample results (all models combined)
+    all_samples = []
+    for detail in results.get("detailed_results", []):
+        if "error" in detail:
+            continue
+        model_id = detail["model_id"]
+        dataset_id = detail["dataset_id"]
+        for sample in detail.get("per_sample_results", []):
+            all_samples.append({
+                "model_id": model_id,
+                "dataset_id": dataset_id,
+                **sample,
+            })
 
-    summary_ds = Dataset.from_dict(summary_data, features=summary_features)
-
-    # 2. Push per-sample results
-    per_sample = results.get("per_sample_results", [])
-    if per_sample:
-        sample_data = {
-            "index": [s["index"] for s in per_sample],
-            "reference": [s["reference"] for s in per_sample],
-            "prediction": [s["prediction"] for s in per_sample],
-            "wer": [s["wer"] for s in per_sample],
-            "cer": [s["cer"] for s in per_sample],
-            "duration_s": [s["duration_s"] for s in per_sample],
-        }
-
-        sample_features = Features({
-            "index": Value("int64"),
-            "reference": Value("string"),
-            "prediction": Value("string"),
-            "wer": Value("float64"),
-            "cer": Value("float64"),
-            "duration_s": Value("float64"),
-        })
-
-        samples_ds = Dataset.from_dict(sample_data, features=sample_features)
+    if all_samples:
+        sample_data = {k: [s.get(k) for s in all_samples] for k in [
+            "model_id", "dataset_id", "index", "reference",
+            "prediction", "wer", "cer", "duration_s",
+        ]}
+        samples_ds = Dataset.from_dict(sample_data)
     else:
         samples_ds = Dataset.from_dict({
-            "index": [], "reference": [], "prediction": [],
-            "wer": [], "cer": [], "duration_s": [],
+            "model_id": [], "dataset_id": [], "index": [],
+            "reference": [], "prediction": [], "wer": [], "cer": [], "duration_s": [],
         })
 
-    ds_dict = DatasetDict({
-        "summary": summary_ds,
-        "per_sample": samples_ds,
-    })
-
+    ds_dict = DatasetDict({"leaderboard": lb_ds, "per_sample": samples_ds})
     ds_dict.push_to_hub(repo_id, private=private)
     logger.info(f"Dataset pushed to https://huggingface.co/datasets/{repo_id}")
 
-    # 3. Upload the raw JSON results file as well
-    results_file_path = RESULTS_DIR / "latest_summary.json"
-    if results_file_path.exists():
-        api.upload_file(
-            path_or_fileobj=str(results_file_path),
-            path_in_repo="latest_summary.json",
-            repo_id=repo_id,
-            repo_type="dataset",
-        )
-        logger.info("Uploaded latest_summary.json to repo")
+    # 3. Upload raw JSON
+    results_file = find_latest_results()
+    api.upload_file(
+        path_or_fileobj=str(results_file),
+        path_in_repo="latest_benchmark.json",
+        repo_id=repo_id,
+        repo_type="dataset",
+    )
 
-    # 4. Create a README / dataset card
-    readme_content = f"""---
+    # 4. Generate README
+    lb_table = "| Rank | Model | Category | WER | CER | RTF | Cost (T4) |\n"
+    lb_table += "|------|-------|----------|-----|-----|-----|-----------|\n"
+    for i, entry in enumerate(leaderboard, 1):
+        rtf_str = f"{entry['rtf']:.4f}" if entry.get('rtf') else "N/A"
+        lb_table += (
+            f"| {i} | `{entry['model_id']}` | {entry['category']} | "
+            f"{entry['wer']:.4f} | {entry['cer']:.4f} | {rtf_str} | "
+            f"${entry.get('cost_T4_usd', 0):.6f} |\n"
+        )
+
+    readme = f"""---
 language:
 - vi
 tags:
@@ -163,52 +122,48 @@ tags:
 - benchmark
 - whisper
 - vietnamese
-pretty_name: "ASR Benchmark Results"
+- phowhisper
+pretty_name: "ASR Multi-Model Benchmark Results"
 ---
 
-# ASR Benchmark Results
+# ASR Multi-Model Benchmark Results
 
-## Model: `{metadata['model_id']}`
-## Dataset: `{metadata['dataset_id']}` (split: `{metadata['split']}`)
+Comparing {len(leaderboard)} ASR models on Vietnamese speech datasets.
 
-### Metrics
+## Leaderboard (sorted by WER)
 
-| Metric | Value |
-|--------|-------|
-| **WER** | {metrics['overall_wer']:.4f} ({metrics['overall_wer']*100:.2f}%) |
-| **CER** | {metrics['overall_cer']:.4f} ({metrics['overall_cer']*100:.2f}%) |
-| Samples | {metrics['num_samples']} |
-| Audio Duration | {metrics['total_audio_duration_s']:.1f}s |
-| Inference Time | {metrics['total_inference_time_s']:.1f}s |
-| Real-Time Factor | {metrics.get('real_time_factor', 'N/A')} |
-| Device | {metadata['device']} |
-| Batch Size | {metrics['batch_size']} |
+{lb_table}
 
-### Splits
+## Splits
 
-- **`summary`**: Aggregate metrics (1 row per benchmark run)
-- **`per_sample`**: Per-sample predictions, references, WER, and CER
+- **`leaderboard`**: Model comparison table (1 row per model)
+- **`per_sample`**: Per-sample predictions for all models
 
-### Usage
+## Usage
 
 ```python
 from datasets import load_dataset
 
-# Load summary metrics
-summary = load_dataset("{repo_id}", split="summary")
-print(summary[0])
+# Load leaderboard
+lb = load_dataset("{repo_id}", split="leaderboard")
+print(lb.to_pandas().sort_values("wer"))
 
-# Load per-sample results
+# Load per-sample results for a specific model
 samples = load_dataset("{repo_id}", split="per_sample")
-print(samples[0])
+df = samples.to_pandas()
+model_df = df[df["model_id"] == "vinai/PhoWhisper-large"]
 ```
 
-### Timestamp
-{metadata['timestamp']}
+## Metadata
+
+- **Timestamp**: {metadata['timestamp']}
+- **Device**: {metadata['device']}
+- **Models tested**: {metadata['num_models']}
+- **Datasets**: {metadata['num_datasets']}
 """
 
     api.upload_file(
-        path_or_fileobj=readme_content.encode("utf-8"),
+        path_or_fileobj=readme.encode("utf-8"),
         path_in_repo="README.md",
         repo_id=repo_id,
         repo_type="dataset",
@@ -218,18 +173,13 @@ print(samples[0])
 
 def main():
     args = parse_args()
-
-    if args.results_file:
-        results_path = Path(args.results_file)
-    else:
-        results_path = find_latest_results()
-
+    results_path = Path(args.results_file) if args.results_file else find_latest_results()
     logger.info(f"Loading results from {results_path}")
-    results = load_results(results_path)
 
-    logger.info(f"Pushing to HuggingFace: {args.hf_repo_id}")
-    push_metrics_dataset(results, args.hf_repo_id, args.private)
+    with open(results_path, "r", encoding="utf-8") as f:
+        results = json.load(f)
 
+    push_results(results, args.hf_repo_id, args.private)
     logger.info("Done!")
 
 
