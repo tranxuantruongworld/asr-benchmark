@@ -1,0 +1,48 @@
+# ASR Multi-Model Benchmark Configuration
+#
+# FLOW:
+# 1. User uploads datasets to HuggingFace Hub
+# 2. Kaggle notebook runs weekly (scheduled), detects new datasets
+# 3. Results auto-pushed to HuggingFace Hub
+# 4. Streamlit dashboard on HuggingFace Spaces shows leaderboard
+
+models:
+  - id: "vinai/PhoWhisper-large"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "1550M"
+    notes: "Fine-tuned Whisper Large V2 for Vietnamese"
+
+  - id: "openai/whisper-large-v3-turbo"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "809M"
+    notes: "Pruned Whisper Large V3, 4 decoder layers, ~3x faster"
+
+# Datasets to benchmark.
+# The Kaggle notebook will also check a HuggingFace "registry" repo
+# for new datasets uploaded by users.
+datasets:
+  - id: "thanhnew2001/VietSuperSpeech"
+    split: "validation"
+    language: "vi"
+    description: "Vietnamese speech dataset - 6,750 validation samples"
+
+# HuggingFace Hub settings
+huggingface:
+  # Repo where benchmark results are stored (leaderboard + per-sample)
+  results_repo: ""  # e.g. "your-username/asr-benchmark-results"
+  # Repo where user registers new datasets to benchmark
+  # This repo contains a datasets.json file listing dataset IDs
+  registry_repo: ""  # e.g. "your-username/asr-benchmark-registry"
+
+# GPU pricing (USD/hour) for cost estimation
+gpu_pricing:
+  T4: 0.35
+  P100: 0.46
+  free_tier: 0.00
+
+benchmark:
+  default_batch_size: 8
+  default_max_samples: null
+  target_sample_rate: 16000
