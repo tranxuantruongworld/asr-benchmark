@@ -1,0 +1,89 @@
+# ASR Multi-Model Benchmark Configuration
+# Add/remove models and datasets here to customize benchmark runs
+
+models:
+  # Vietnamese-specific models (VinAI PhoWhisper) - fine-tuned for Vietnamese
+  - id: "vinai/PhoWhisper-large"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "1550M"
+    notes: "Fine-tuned Whisper Large V2 for Vietnamese"
+
+  - id: "vinai/PhoWhisper-medium"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "769M"
+    notes: "Fine-tuned Whisper Medium for Vietnamese"
+
+  - id: "vinai/PhoWhisper-small"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "244M"
+    notes: "Fine-tuned Whisper Small for Vietnamese"
+
+  - id: "vinai/PhoWhisper-base"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "74M"
+    notes: "Fine-tuned Whisper Base for Vietnamese"
+
+  - id: "vinai/PhoWhisper-tiny"
+    language: "vietnamese"
+    category: "vietnamese-specific"
+    size_params: "39M"
+    notes: "Fine-tuned Whisper Tiny for Vietnamese"
+
+  # General multilingual models (OpenAI Whisper)
+  - id: "openai/whisper-large-v3"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "1550M"
+    notes: "Best general quality, 99 languages"
+
+  - id: "openai/whisper-large-v3-turbo"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "809M"
+    notes: "Pruned Large V3, 4 decoder layers, ~3x faster"
+
+  - id: "openai/whisper-medium"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "769M"
+    notes: "Medium quality, good balance"
+
+  - id: "openai/whisper-small"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "244M"
+    notes: "Small model, fast inference"
+
+  - id: "openai/whisper-base"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "74M"
+    notes: "Base model, very fast"
+
+  - id: "openai/whisper-tiny"
+    language: "vietnamese"
+    category: "multilingual"
+    size_params: "39M"
+    notes: "Smallest model, fastest inference"
+
+datasets:
+  - id: "thanhnew2001/VietSuperSpeech"
+    split: "validation"
+    language: "vi"
+    description: "Vietnamese speech dataset - 6,750 validation samples"
+
+# Cloud GPU pricing reference (USD/hour) for cost estimation
+gpu_pricing:
+  T4: 0.35          # Google Colab (free), but reference market price
+  A100_40GB: 1.10
+  V100: 0.74
+  free_tier: 0.00   # Colab free tier
+
+benchmark:
+  default_batch_size: 8
+  default_max_samples: null  # null = all samples
+  target_sample_rate: 16000
