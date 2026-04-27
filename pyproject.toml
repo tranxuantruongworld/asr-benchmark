@@ -1,0 +1,34 @@
+[project]
+name = "asr-benchmark"
+version = "0.1.0"
+description = "Benchmark ASR models (Whisper) on Vietnamese speech datasets and push results to HuggingFace"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+dependencies = [
+    "torch>=2.0",
+    "torchaudio",
+    "transformers>=4.39",
+    "datasets[audio]>=2.18",
+    "jiwer>=3.0",
+    "accelerate>=0.26",
+    "soundfile",
+    "librosa",
+    "huggingface_hub>=0.21",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dashboard = [
+    "streamlit>=1.30",
+    "pandas",
+]
+dev = [
+    "ruff",
+    "pytest",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
