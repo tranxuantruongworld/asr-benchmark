@@ -2,12 +2,34 @@
 
 Benchmark pipeline for evaluating ASR models on Vietnamese speech datasets. Computes **WER** (Word Error Rate) and **CER** (Character Error Rate), stores results to HuggingFace, and provides a Streamlit dashboard for visualization.
 
-## Quick Start
+## Run on Cloud (Recommended)
+
+### Google Colab (Free GPU)
+
+The easiest way to run the benchmark - no local setup needed:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tranxuantruongworld/asr-benchmark/blob/init-setup/notebooks/benchmark_colab.ipynb)
+
+1. Click the badge above to open the notebook in Google Colab
+2. Select **Runtime > Change runtime type > T4 GPU**
+3. Run all cells
+4. Results are saved as JSON and can be pushed to HuggingFace
+
+### HuggingFace Spaces (Dashboard)
+
+Deploy the dashboard to HuggingFace Spaces for free:
+
+1. Go to [https://huggingface.co/new-space](https://huggingface.co/new-space)
+2. Select **Streamlit** as the SDK
+3. Upload the contents of the `dashboard/` folder (`app.py`, `requirements.txt`, `README.md`)
+4. The dashboard auto-deploys and is publicly accessible
+
+## Local Setup
 
 ### 1. Install Dependencies
 
 ```bash
-pip install -e ".[dashboard]"
+pip install -r requirements.txt
 ```
 
 ### 2. Run Benchmark
@@ -38,7 +60,7 @@ huggingface-cli login
 python scripts/push_to_hf.py --hf-repo-id your-username/asr-benchmark-results
 ```
 
-### 4. View Dashboard
+### 4. View Dashboard Locally
 
 ```bash
 streamlit run dashboard/app.py
@@ -53,11 +75,16 @@ The dashboard can load results from:
 ```
 asr-benchmark/
 ├── scripts/
-│   ├── benchmark.py        # Main benchmark script
-│   └── push_to_hf.py       # Push results to HuggingFace Hub
+│   ├── benchmark.py           # Main benchmark script
+│   └── push_to_hf.py          # Push results to HuggingFace Hub
 ├── dashboard/
-│   └── app.py              # Streamlit dashboard
-├── results/                # Benchmark results (generated)
+│   ├── app.py                 # Streamlit dashboard
+│   ├── requirements.txt       # Dashboard dependencies (for HF Spaces)
+│   └── README.md              # HF Spaces metadata
+├── notebooks/
+│   └── benchmark_colab.ipynb  # Google Colab notebook (free GPU)
+├── results/                   # Benchmark results (generated, gitignored)
+├── requirements.txt           # All dependencies
 ├── pyproject.toml
 └── README.md
 ```
@@ -78,17 +105,15 @@ asr-benchmark/
 
 - **[thanhnew2001/VietSuperSpeech](https://huggingface.co/datasets/thanhnew2001/VietSuperSpeech)**: Vietnamese speech dataset with ~67.4k samples (60.7k train, 6.75k validation).
 
-## Dashboard Alternatives
+## Cloud Deployment Options
 
-If you prefer other frameworks, here are supported alternatives:
-
-| Framework | Best For | Integration |
-|-----------|----------|-------------|
-| **Streamlit** | Quick local dashboards | Included (`dashboard/app.py`) |
-| **Gradio** | HuggingFace Spaces | Use `gr.Dataframe` + `gr.Plot` |
-| **Weights & Biases** | Experiment tracking | `wandb.log(metrics)` |
-| **MLflow** | ML lifecycle management | `mlflow.log_metrics(metrics)` |
-| **HuggingFace Dataset Viewer** | Zero-config viewing | Automatic with pushed datasets |
+| Platform | What | Cost | How |
+|----------|------|------|-----|
+| **Google Colab** | Run benchmark with free T4 GPU | Free | [Open notebook](https://colab.research.google.com/github/tranxuantruongworld/asr-benchmark/blob/init-setup/notebooks/benchmark_colab.ipynb) |
+| **HuggingFace Spaces** | Deploy Streamlit dashboard | Free | Upload `dashboard/` folder to a new Space |
+| **HuggingFace Dataset Viewer** | View results (zero-config) | Free | Automatic after `push_to_hf.py` |
+| **Weights & Biases** | Experiment tracking | Free tier | `wandb.log(metrics)` |
+| **MLflow** | ML lifecycle management | Self-hosted | `mlflow.log_metrics(metrics)` |
 
 ## Requirements
 
