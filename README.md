@@ -1,122 +1,115 @@
-# ASR Benchmark: Whisper Large V3 Turbo on VietSuperSpeech
+# ASR Benchmark — Automated Pipeline
 
-Benchmark pipeline for evaluating ASR models on Vietnamese speech datasets. Computes **WER** (Word Error Rate) and **CER** (Character Error Rate), stores results to HuggingFace, and provides a Streamlit dashboard for visualization.
+Automated ASR model comparison on Vietnamese speech datasets. Runs on **Kaggle** (free GPU), detects new datasets automatically, pushes results to **HuggingFace**, and displays on a **Streamlit dashboard**.
 
-## Run on Cloud (Recommended)
+## Flow
 
-### Google Colab (Free GPU)
+```
+1. You upload dataset to HuggingFace ──► Registry repo (datasets.json)
+2. Kaggle runs weekly (scheduled)    ──► Detects new datasets
+3. Benchmark 2 models on new data    ──► vinai/PhoWhisper-large + openai/whisper-large-v3-turbo
+4. Results pushed to HuggingFace     ──► Results repo (leaderboard + per-sample)
+5. Dashboard auto-updates            ──► Streamlit on HuggingFace Spaces
+```
 
-The easiest way to run the benchmark - no local setup needed:
+## Models
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tranxuantruongworld/asr-benchmark/blob/init-setup/notebooks/benchmark_colab.ipynb)
+| Model | Category | Params |
+|-------|----------|--------|
+| `vinai/PhoWhisper-large` | Vietnamese-specific | 1550M |
+| `openai/whisper-large-v3-turbo` | Multilingual | 809M |
 
-1. Click the badge above to open the notebook in Google Colab
-2. Select **Runtime > Change runtime type > T4 GPU**
-3. Run all cells
-4. Results are saved as JSON and can be pushed to HuggingFace
+## Quick Start
 
-### HuggingFace Spaces (Dashboard)
-
-Deploy the dashboard to HuggingFace Spaces for free:
-
-1. Go to [https://huggingface.co/new-space](https://huggingface.co/new-space)
-2. Select **Streamlit** as the SDK
-3. Upload the contents of the `dashboard/` folder (`app.py`, `requirements.txt`, `README.md`)
-4. The dashboard auto-deploys and is publicly accessible
-
-## Local Setup
-
-### 1. Install Dependencies
+### 1. Initialize HuggingFace repos (one-time)
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 2. Run Benchmark
-
-```bash
-# Full validation set (6,750 samples) - requires GPU for reasonable speed
-python scripts/benchmark.py
-
-# Quick test with a subset
-python scripts/benchmark.py --max-samples 50
-
-# Custom model/dataset
-python scripts/benchmark.py \
-    --model-id openai/whisper-large-v3-turbo \
-    --dataset-id thanhnew2001/VietSuperSpeech \
-    --split validation \
-    --batch-size 16 \
-    --language vietnamese
-```
-
-### 3. Push Results to HuggingFace
-
-```bash
-# Login first
 huggingface-cli login
 
-# Push results
-python scripts/push_to_hf.py --hf-repo-id your-username/asr-benchmark-results
+python scripts/init_registry.py \
+    --registry-repo your-username/asr-benchmark-registry \
+    --results-repo your-username/asr-benchmark-results
 ```
 
-### 4. View Dashboard Locally
+This creates:
+- **Registry repo**: where you add new datasets to benchmark
+- **Results repo**: where benchmark results are stored
 
-```bash
-streamlit run dashboard/app.py
+### 2. Set up Kaggle notebook (one-time)
+
+1. Go to [kaggle.com/code](https://www.kaggle.com/code) → **New Notebook**
+2. Upload `notebooks/benchmark_kaggle.ipynb`
+3. Settings:
+   - **Accelerator**: GPU T4 x2
+   - **Internet**: On
+   - **Secrets**: Add these 3 secrets:
+     - `HF_TOKEN` — your HuggingFace write token
+     - `HF_REGISTRY_REPO` — e.g. `your-username/asr-benchmark-registry`
+     - `HF_RESULTS_REPO` — e.g. `your-username/asr-benchmark-results`
+4. **Run All** to test
+5. **Schedule**: File → Schedule → **Weekly**
+
+### 3. Add new datasets
+
+Edit `datasets.json` in your registry repo on HuggingFace:
+
+```json
+[
+    {"id": "thanhnew2001/VietSuperSpeech", "split": "validation", "added": "2025-01-01"},
+    {"id": "your-username/your-new-dataset", "split": "test", "added": "2025-04-27"}
+]
 ```
 
-The dashboard can load results from:
-- A **HuggingFace dataset repo** (enter the repo ID in the sidebar)
-- A **local JSON file** (upload via the sidebar)
+The next Kaggle run will automatically detect and benchmark only the new datasets.
 
-## Project Structure
+**Dataset requirements**: Must have `audio` (file path) and `text` (transcription) columns.
 
-```
-asr-benchmark/
-├── scripts/
-│   ├── benchmark.py           # Main benchmark script
-│   └── push_to_hf.py          # Push results to HuggingFace Hub
-├── dashboard/
-│   ├── app.py                 # Streamlit dashboard
-│   ├── requirements.txt       # Dashboard dependencies (for HF Spaces)
-│   └── README.md              # HF Spaces metadata
-├── notebooks/
-│   └── benchmark_colab.ipynb  # Google Colab notebook (free GPU)
-├── results/                   # Benchmark results (generated, gitignored)
-├── requirements.txt           # All dependencies
-├── pyproject.toml
-└── README.md
-```
+### 4. Deploy dashboard (one-time)
+
+Deploy to HuggingFace Spaces for free:
+
+1. Go to [huggingface.co/new-space](https://huggingface.co/new-space)
+2. Select **Streamlit** as SDK
+3. Upload files from `dashboard/` folder (`app.py`, `requirements.txt`, `README.md`)
+4. Dashboard auto-deploys and loads results from your results repo
 
 ## Metrics
 
 | Metric | Description |
 |--------|-------------|
-| **WER** | Word Error Rate - measures word-level transcription accuracy |
-| **CER** | Character Error Rate - measures character-level transcription accuracy |
-| **RTF** | Real-Time Factor - ratio of inference time to audio duration |
+| **WER** | Word Error Rate (lower = better) |
+| **CER** | Character Error Rate (lower = better) |
+| **RTF** | Real-Time Factor (< 1.0 = faster than real-time) |
+| **Cost** | Estimated GPU cost per run |
 
-## Model
+## Project Structure
 
-- **[openai/whisper-large-v3-turbo](https://huggingface.co/openai/whisper-large-v3-turbo)**: Pruned version of Whisper Large V3 with 4 decoder layers (vs 32), offering ~3-4x faster inference with minor quality loss.
+```
+asr-benchmark/
+├── config.yaml                  # Models & datasets config
+├── scripts/
+│   ├── benchmark.py             # Multi-model benchmark (CLI)
+│   ├── push_to_hf.py            # Push results to HuggingFace
+│   ├── init_registry.py         # One-time: init HF registry + results repos
+│   └── registry.py              # Dataset registry management
+├── notebooks/
+│   └── benchmark_kaggle.ipynb   # Kaggle notebook (auto-scheduled)
+├── dashboard/
+│   ├── app.py                   # Streamlit dashboard
+│   ├── requirements.txt         # Dashboard deps (for HF Spaces)
+│   └── README.md                # HF Spaces metadata
+├── results/                     # Local results (gitignored)
+├── requirements.txt
+└── README.md
+```
 
-## Dataset
+## Cost
 
-- **[thanhnew2001/VietSuperSpeech](https://huggingface.co/datasets/thanhnew2001/VietSuperSpeech)**: Vietnamese speech dataset with ~67.4k samples (60.7k train, 6.75k validation).
-
-## Cloud Deployment Options
-
-| Platform | What | Cost | How |
-|----------|------|------|-----|
-| **Google Colab** | Run benchmark with free T4 GPU | Free | [Open notebook](https://colab.research.google.com/github/tranxuantruongworld/asr-benchmark/blob/init-setup/notebooks/benchmark_colab.ipynb) |
-| **HuggingFace Spaces** | Deploy Streamlit dashboard | Free | Upload `dashboard/` folder to a new Space |
-| **HuggingFace Dataset Viewer** | View results (zero-config) | Free | Automatic after `push_to_hf.py` |
-| **Weights & Biases** | Experiment tracking | Free tier | `wandb.log(metrics)` |
-| **MLflow** | ML lifecycle management | Self-hosted | `mlflow.log_metrics(metrics)` |
-
-## Requirements
-
-- Python 3.10+
-- GPU recommended for full benchmark (CPU works but is very slow)
-- HuggingFace account (for pushing results)
+| Component | Cost |
+|-----------|------|
+| Kaggle GPU (T4, 30h/week) | **Free** |
+| HuggingFace Hub (datasets) | **Free** |
+| HuggingFace Spaces (dashboard) | **Free** |
+| GitHub (code) | **Free** |
+| **Total** | **$0** |
